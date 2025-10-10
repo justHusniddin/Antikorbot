@@ -27,7 +27,7 @@ class TelegramUser(models.Model):
     language = models.CharField(
         max_length=2,
         choices=[('ru', 'Russian'), ('uz', 'Uzbek')],
-        default='ru',
+        # default='ru',
         verbose_name=_("Language")
     )
     is_blocked = models.BooleanField(

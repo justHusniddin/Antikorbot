@@ -4,6 +4,16 @@ from aiogram.fsm.context import FSMContext
 from asgiref.sync import sync_to_async
 import re
 
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from io import BytesIO
+import os
+import zipfile
+from aiogram.types import FSInputFile
+
 from tgbot.models import TelegramUser, Complaint, ComplaintMedia
 from tgbot.bot.states.complaint import ComplaintStates
 from tgbot.bot.keyboards.reply import (
@@ -531,55 +541,131 @@ async def cancel_complaint(message: Message, state: FSMContext):
     await state.clear()
 
 
-async def send_complaint_to_admin(complaint, media_files: list, lang: str):
+# async def send_complaint_to_admin(complaint, media_files: list, lang: str):
 
-    admin_text = f"🚨 <b>Новая жалоба #{complaint.id}</b>\n\n"
+#     admin_text = f"🚨 <b>Новая жалоба #{complaint.id}</b>\n\n"
+
+#     if complaint.is_anonymous:
+#         admin_text += "🕵️ <b>Тип:</b> Анонимная\n\n"
+#     else:
+#         admin_text += f"👤 <b>От:</b> {complaint.full_name}\n"
+#         admin_text += f"📱 <b>Телефон:</b> {complaint.phone_number}\n"
+#         if complaint.telegram_username:
+#             admin_text += f"💬 <b>Telegram:</b> @{complaint.telegram_username}\n"
+#         admin_text += "\n"
+
+#     admin_text += f"📍 <b>Регион:</b> {complaint.region_name}\n"
+#     admin_text += f"🏘 <b>Район:</b> {complaint.district_name}\n"
+#     if complaint.street_name:
+#         admin_text += f"📌 <b>Махалля:</b> {complaint.street_name}\n"
+#     admin_text += "\n"
+
+#     admin_text += f"👨‍💼 <b>На кого:</b> {complaint.target_full_name}\n"
+#     admin_text += f"💼 <b>Должность:</b> {complaint.target_position}\n"
+#     admin_text += f"🏢 <b>Организация:</b> {complaint.target_organization}\n\n"
+
+#     admin_text += f"📝 <b>Текст жалобы:</b>\n{complaint.complaint_text}\n\n"
+
+#     admin_text += f"🕐 <b>Дата:</b> {complaint.created_at.strftime('%d.%m.%Y %H:%M')}"
+
+#     try:
+
+#         await bot.send_message(
+#             chat_id=ADMIN_CHAT_ID,
+#             text=admin_text
+#         )
+
+#         for media in media_files:
+#             if media['file_type'] == 'photo':
+#                 await bot.send_photo(
+#                     chat_id=ADMIN_CHAT_ID,
+#                     photo=media['file_id']
+#                 )
+#             elif media['file_type'] == 'video':
+#                 await bot.send_video(
+#                     chat_id=ADMIN_CHAT_ID,
+#                     video=media['file_id']
+#                 )
+#             elif media['file_type'] == 'document':
+#                 await bot.send_document(
+#                     chat_id=ADMIN_CHAT_ID,
+#                     document=media['file_id']
+#                 )
+#     except Exception as e:
+#         print(f"Error sending to admin chat: {e}")
+pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
+
+GROUP_ID = str(os.getenv('GROUP_ID', ADMIN_CHAT_ID))
+
+async def send_complaint_to_admin(complaint, media_files: list, lang: str):
+    # 🧾 Text message for admin
+    admin_text = f"🚨 <b>Yangi shikoyat #{complaint.id}</b>\n\n"
 
     if complaint.is_anonymous:
-        admin_text += "🕵️ <b>Тип:</b> Анонимная\n\n"
+        admin_text += "🕵️ <b>Turi:</b> Anonim\n\n"
     else:
-        admin_text += f"👤 <b>От:</b> {complaint.full_name}\n"
-        admin_text += f"📱 <b>Телефон:</b> {complaint.phone_number}\n"
+        admin_text += f"👤 <b>Yuboruvchi:</b> {complaint.full_name}\n"
+        admin_text += f"📱 <b>Telefon:</b> {complaint.phone_number}\n"
         if complaint.telegram_username:
             admin_text += f"💬 <b>Telegram:</b> @{complaint.telegram_username}\n"
         admin_text += "\n"
 
-    admin_text += f"📍 <b>Регион:</b> {complaint.region_name}\n"
-    admin_text += f"🏘 <b>Район:</b> {complaint.district_name}\n"
+    admin_text += f"📍 <b>Manzil:</b> {complaint.region_name}, {complaint.district_name}\n"
     if complaint.street_name:
-        admin_text += f"📌 <b>Махалля:</b> {complaint.street_name}\n"
+        admin_text += f"🏘 <b>Mahalla:</b> {complaint.street_name}\n"
     admin_text += "\n"
 
-    admin_text += f"👨‍💼 <b>На кого:</b> {complaint.target_full_name}\n"
-    admin_text += f"💼 <b>Должность:</b> {complaint.target_position}\n"
-    admin_text += f"🏢 <b>Организация:</b> {complaint.target_organization}\n\n"
+    admin_text += f"👨‍💼 <b>Kimga qarshi:</b> {complaint.target_full_name}\n"
+    admin_text += f"💼 <b>Lavozimi:</b> {complaint.target_position}\n"
+    admin_text += f"🏢 <b>Tashkilot:</b> {complaint.target_organization}\n\n"
+    admin_text += f"📝 <b>Shikoyat matni:</b>\n{complaint.complaint_text}\n\n"
+    admin_text += f"🕐 <b>Sana:</b> {complaint.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
 
-    admin_text += f"📝 <b>Текст жалобы:</b>\n{complaint.complaint_text}\n\n"
+    # 📄 Create summary PDF
+    folder_path = f"/tmp/complaint_{complaint.id}"
+    os.makedirs(folder_path, exist_ok=True)
+    pdf_path = os.path.join(folder_path, f"complaint_{complaint.id}_summary.pdf")
 
-    admin_text += f"🕐 <b>Дата:</b> {complaint.created_at.strftime('%d.%m.%Y %H:%M')}"
+    pdf_buffer = BytesIO()
+    doc = SimpleDocTemplate(pdf_buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    styles["Normal"].fontName = 'DejaVuSans'
+    styles["Heading1"].fontName = 'DejaVuSans'
 
+    story = [
+        Paragraph(f"<b>Shikoyat №{complaint.id}</b>", styles["Heading1"]),
+        Spacer(1, 12),
+        Paragraph(admin_text.replace("\n", "<br/>"), styles["Normal"]),
+    ]
+    doc.build(story)
+
+    with open(pdf_path, "wb") as f:
+        f.write(pdf_buffer.getvalue())
+
+    # 📦 Save original media (without converting)
+    for media in media_files:
+        try:
+            file_info = await bot.get_file(media['file_id'])
+            file_path = f"{folder_path}/{media.get('file_name', media['file_id'])}"
+            await bot.download_file(file_info.file_path, destination=file_path)
+        except Exception as e:
+            print(f"Error downloading media: {e}")
+
+    # 🔐 Create ZIP (contains PDF + all attachments)
+    zip_path = f"{folder_path}.zip"
+    with zipfile.ZipFile(zip_path, "w") as zipf:
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                full_path = os.path.join(root, file)
+                zipf.write(full_path, os.path.relpath(full_path, folder_path))
+
+    # 📤 Send summary message + ZIP to admin
     try:
+        await bot.send_message(chat_id=GROUP_ID, text=admin_text, parse_mode="HTML")
 
-        await bot.send_message(
-            chat_id=ADMIN_CHAT_ID,
-            text=admin_text
-        )
+        zip_file = FSInputFile(zip_path, filename=f"complaint_{complaint.id}.zip")
+        await bot.send_document(chat_id=GROUP_ID, document=zip_file,
+                                caption=f"📦 Shikoyat #{complaint.id} uchun fayllar")
 
-        for media in media_files:
-            if media['file_type'] == 'photo':
-                await bot.send_photo(
-                    chat_id=ADMIN_CHAT_ID,
-                    photo=media['file_id']
-                )
-            elif media['file_type'] == 'video':
-                await bot.send_video(
-                    chat_id=ADMIN_CHAT_ID,
-                    video=media['file_id']
-                )
-            elif media['file_type'] == 'document':
-                await bot.send_document(
-                    chat_id=ADMIN_CHAT_ID,
-                    document=media['file_id']
-                )
     except Exception as e:
-        print(f"Error sending to admin chat: {e}")
+        print(f"Error sending complaint to admin: {e}")
