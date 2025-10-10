@@ -9,7 +9,9 @@ from django.http import HttpResponse
 import csv
 from datetime import datetime
 from .models import TelegramUser, Complaint, ComplaintMedia, BroadcastMessage
-
+import zipfile
+import io
+import os
 
 @admin.register(TelegramUser)
 class TelegramUserAdmin(admin.ModelAdmin):
@@ -201,18 +203,39 @@ class ComplaintAdmin(admin.ModelAdmin):
 
 @admin.register(ComplaintMedia)
 class ComplaintMediaAdmin(admin.ModelAdmin):
-
     list_display = ['id', 'complaint_link', 'file_type', 'file_name', 'created_at']
     list_filter = ['file_type', 'created_at']
     search_fields = ['complaint__id', 'file_id', 'file_name']
     readonly_fields = ['complaint', 'file_id', 'file_type', 'file_name', 'created_at']
+    actions = ['download_selected_as_zip']
 
     def complaint_link(self, obj):
         url = reverse('admin:tgbot_complaint_change', args=[obj.complaint.id])
         return format_html('<a href="{}">Complaint #{}</a>', url, obj.complaint.id)
     complaint_link.short_description = _('Complaint')
 
+    def download_selected_as_zip(self, request, queryset):
+        zip_buffer = io.BytesIO()
+        added_files = 0
+        with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
+            for media in queryset:
+                for field_name in ['file', 'media_file', 'attachment', 'uploaded_file']:
+                    if hasattr(media, field_name):
+                        file_field = getattr(media, field_name)
+                        if file_field and hasattr(file_field, 'path') and os.path.exists(file_field.path):
+                            zip_file.write(file_field.path, os.path.basename(file_field.path))
+                            added_files += 1
+                            break  
 
+        if added_files == 0:
+            self.message_user(request, "Hech qanday haqiqiy fayl topilmadi!", level='warning')
+
+        zip_buffer.seek(0)
+        response = HttpResponse(zip_buffer, content_type='application/zip')
+        response['Content-Disposition'] = 'attachment; filename="complaint_media.zip"'
+        return response
+
+    download_selected_as_zip.short_description = _("Download selected Complaint Media as ZIP")
 @admin.register(BroadcastMessage)
 class BroadcastMessageAdmin(admin.ModelAdmin):
 
@@ -259,13 +282,9 @@ def export_to_excel(modeladmin, request, queryset):
             obj.complaint_text,
             obj.created_at.strftime("%Y-%m-%d %H:%M"),
         ])
-
-    # 4. Excel faylni javob sifatida qaytarish
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
     response['Content-Disposition'] = 'attachment; filename=complaints.xlsx'
     workbook.save(response)
     return response
-
-
