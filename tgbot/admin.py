@@ -12,25 +12,53 @@ from .models import TelegramUser, Complaint, ComplaintMedia, BroadcastMessage
 import zipfile
 import io
 import os
+from django.conf import settings 
+import requests 
+from django.utils import timezone 
 
-@admin.register(TelegramUser)
-class TelegramUserAdmin(admin.ModelAdmin):
+def send_telegram_status_update(telegram_id, message_text):
+    """Berilgan Telegram IDga xabar yuborish uchun funksiya."""
+    bot_token = getattr(settings, 'API_TOKEN', None) 
 
-    list_display = ['telegram_id', 'username', 'full_name_display', 'language', 'is_blocked', 'created_at']
-    list_filter = ['language', 'is_blocked', 'created_at']
-    search_fields = ['telegram_id', 'username', 'first_name', 'last_name']
-    readonly_fields = ['telegram_id', 'created_at', 'updated_at']
-    ordering = ['-created_at']
+    if not bot_token:
+        print("XATO: BOT_TOKEN settings.py da topilmadi!")
+        return False
 
-    def full_name_display(self, obj):
-        """Display full name"""
-        parts = []
-        if obj.first_name:
-            parts.append(obj.first_name)
-        if obj.last_name:
-            parts.append(obj.last_name)
-        return ' '.join(parts) if parts else '-'
-    full_name_display.short_description = _('Full Name')
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+
+    payload = {
+        'chat_id': telegram_id,
+        'text': message_text,
+        'parse_mode': 'HTML'
+    }
+    try:
+        response = requests.post(url, data=payload, timeout=5)
+        response.raise_for_status() 
+        return True
+    except requests.exceptions.RequestException as e:
+        status_code = getattr(e.response, 'status_code', 'N/A')
+        print(f"❌ Telegramga xabar yuborishda xato ({telegram_id}) - Status: {status_code}: {e}")
+        return False
+    
+    
+# @admin.register(TelegramUser)
+# class TelegramUserAdmin(admin.ModelAdmin):
+
+#     list_display = ['telegram_id', 'username', 'full_name_display', 'language', 'is_blocked', 'created_at']
+#     list_filter = ['language', 'is_blocked', 'created_at']
+#     search_fields = ['telegram_id', 'username', 'first_name', 'last_name']
+#     readonly_fields = ['telegram_id', 'created_at', 'updated_at']
+#     ordering = ['-created_at']
+
+#     def full_name_display(self, obj):
+#         """Display full name"""
+#         parts = []
+#         if obj.first_name:
+#             parts.append(obj.first_name)
+#         if obj.last_name:
+#             parts.append(obj.last_name)
+#         return ' '.join(parts) if parts else '-'
+#     full_name_display.short_description = _('Full Name')
 
 
 class ComplaintMediaInline(admin.TabularInline):
@@ -50,7 +78,7 @@ class ComplaintAdmin(admin.ModelAdmin):
         'id',
         'created_at',
         'status_badge',
-        'user_display',
+        # 'user_display',
         'is_anonymous',
         'region_name',
         'district_name',
@@ -83,9 +111,9 @@ class ComplaintAdmin(admin.ModelAdmin):
         (_('Status'), {
             'fields': ('status', 'admin_notes')
         }),
-        (_('Reporter Information'), {
-            'fields': ('user', 'is_anonymous', 'full_name', 'phone_number', 'telegram_username')
-        }),
+        # (_('Reporter Information'), {
+        #     'fields': ('user', 'is_anonymous', 'full_name', 'phone_number', 'telegram_username')
+        # }),
         (_('Location'), {
             'fields': ('full_address_display', 'region_name', 'district_name', 'street_name')
         }),
@@ -119,13 +147,13 @@ class ComplaintAdmin(admin.ModelAdmin):
         )
     status_badge.short_description = _('Status')
 
-    def user_display(self, obj):
-        if obj.is_anonymous:
-            return format_html('<em style="color: #7f8c8d;">Anonymous</em>')
-        if obj.user:
-            return f"@{obj.user.username}" if obj.user.username else str(obj.user.telegram_id)
-        return '-'
-    user_display.short_description = _('User')
+    # def user_display(self, obj):
+    #     if obj.is_anonymous:
+    #         return format_html('<em style="color: #7f8c8d;">Anonymous</em>')
+    #     if obj.user:
+    #         return f"@{obj.user.username}" if obj.user.username else str(obj.user.telegram_id)
+    #     return '-'
+    # user_display.short_description = _('User')
 
     def view_details_link(self, obj):
         """Link to view complaint details"""
@@ -153,7 +181,7 @@ class ComplaintAdmin(admin.ModelAdmin):
         """Export selected complaints to CSV"""
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="complaints_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
-        response.write('\ufeff')  # UTF-8 BOM for Excel
+        response.write('\ufeff')  
 
         writer = csv.writer(response)
         writer.writerow([
@@ -183,23 +211,55 @@ class ComplaintAdmin(admin.ModelAdmin):
     export_to_csv.short_description = _('Export selected complaints to CSV')
 
     def mark_in_progress(self, request, queryset):
-        """Mark selected complaints as in progress"""
-        updated = queryset.update(status='in_progress')
-        self.message_user(request, f'{updated} complaint(s) marked as in progress.')
-    mark_in_progress.short_description = _('Mark as In Progress')
+        """Mark selected complaints as in progress and notify user"""
+        updated_count = 0
+        
+        for complaint in queryset:
+            complaint.status = 'in_progress'
+            complaint.save(update_fields=['status', 'updated_at'])
+            updated_count += 1
+            
+            if complaint.user and complaint.user.telegram_id:
+                message = f"⏳ **Ariza holati yangilandi**\n\nSizning **№{complaint.id}** raqamli arizangiz **ko'rib chiqilmoqda** (jarayonda). Iltimos, yakuniy natijani kuting."
+                send_telegram_status_update(complaint.user.telegram_id, message)
+        
+        self.message_user(request, f'{updated_count} ta ariza "Jarayonda" deb belgilandi va foydalanuvchilarga xabar berildi.')
+    mark_in_progress.short_description = _('Mark as In Progress and Notify User')
 
     def mark_resolved(self, request, queryset):
-        """Mark selected complaints as resolved"""
-        updated = queryset.update(status='resolved', resolved_at=datetime.now())
-        self.message_user(request, f'{updated} complaint(s) marked as resolved.')
-    mark_resolved.short_description = _('Mark as Resolved')
+        """Mark selected complaints as resolved and notify user"""
+        updated_count = 0
+        now = timezone.now() 
+        
+        for complaint in queryset:
+            complaint.status = 'resolved'
+            complaint.resolved_at = now
+            complaint.save(update_fields=['status', 'resolved_at', 'updated_at'])
+            updated_count += 1
+            
+            if complaint.user and complaint.user.telegram_id:
+                message = f"✅ **Ariza hal qilindi**\n\nSizning **№{complaint.id}** raqamli arizangiz **muvaffaqiyatli hal qilindi**. E'tiboringiz uchun rahmat."
+                send_telegram_status_update(complaint.user.telegram_id, message)
+        
+        self.message_user(request, f'{updated_count} ta ariza "Hal qilindi" deb belgilandi va foydalanuvchilarga xabar berildi.')
+    mark_resolved.short_description = _('Mark as Resolved and Notify User')
 
     def mark_rejected(self, request, queryset):
-        """Mark selected complaints as rejected"""
-        updated = queryset.update(status='rejected')
-        self.message_user(request, f'{updated} complaint(s) marked as rejected.')
-    mark_rejected.short_description = _('Mark as Rejected')
-
+        """Mark selected complaints as rejected and notify user"""
+        updated_count = 0
+        
+        for complaint in queryset:
+            complaint.status = 'rejected'
+            complaint.save(update_fields=['status', 'updated_at'])
+            updated_count += 1
+            
+            if complaint.user and complaint.user.telegram_id:
+                message = f"❌ **Ariza rad etildi**\n\nUzr, sizning **№{complaint.id}** raqamli arizangiz **rad etildi**."
+                send_telegram_status_update(complaint.user.telegram_id, message)
+        
+        self.message_user(request, f'{updated_count} ta ariza "Rad etildi" deb belgilandi va foydalanuvchilarga xabar berildi.')
+    mark_rejected.short_description = _('Mark as Rejected and Notify User')
+    
 
 @admin.register(ComplaintMedia)
 class ComplaintMediaAdmin(admin.ModelAdmin):

@@ -1,47 +1,22 @@
 from django.db import models
+from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
+
 class TelegramUser(models.Model):
-    telegram_id = models.BigIntegerField(
-        unique=True,
-        verbose_name=_("Telegram ID")
-    )
-    username = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True,
-        verbose_name=_("Username")
-    )
-    first_name = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True,
-        verbose_name=_("First Name")
-    )
-    last_name = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True,
-        verbose_name=_("Last Name")
-    )
+    telegram_id = models.BigIntegerField(unique=True, verbose_name=_("Telegram ID"))
+    username = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Username"))
+    first_name = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("First Name"))
+    last_name = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Last Name"))
     language = models.CharField(
         max_length=2,
         choices=[('ru', 'Russian'), ('uz', 'Uzbek')],
-        # default='ru',
+        default='uz',
         verbose_name=_("Language")
     )
-    is_blocked = models.BooleanField(
-        default=False,
-        verbose_name=_("Is Blocked")
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name=_("Created At")
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        verbose_name=_("Updated At")
-    )
+    is_blocked = models.BooleanField(default=False, verbose_name=_("Is Blocked"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
 
     class Meta:
         verbose_name = _("Telegram User")
@@ -69,100 +44,41 @@ class Complaint(models.Model):
         related_name='complaints',
         verbose_name=_("User")
     )
-    is_anonymous = models.BooleanField(
-        default=False,
-        verbose_name=_("Is Anonymous")
-    )
+    is_anonymous = models.BooleanField(default=False, verbose_name=_("Is Anonymous"))
 
-    # Contact details (if not anonymous)
-    full_name = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True,
-        verbose_name=_("Full Name")
-    )
-    phone_number = models.CharField(
-        max_length=20,
-        blank=True,
-        null=True,
-        verbose_name=_("Phone Number")
-    )
-    telegram_username = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True,
-        verbose_name=_("Telegram Username")
-    )
+    # Contact details
+    full_name = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Full Name"))
+    phone_number = models.CharField(max_length=20, blank=True, null=True, verbose_name=_("Phone Number"))
+    telegram_username = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Telegram Username"))
 
-    region_id = models.IntegerField(
-        verbose_name=_("Region ID")
-    )
-    region_name = models.CharField(
-        max_length=255,
-        verbose_name=_("Region Name")
-    )
-    district_id = models.IntegerField(
-        verbose_name=_("District ID")
-    )
-    district_name = models.CharField(
-        max_length=255,
-        verbose_name=_("District Name")
-    )
-    street_id = models.IntegerField(
-        blank=True,
-        null=True,
-        verbose_name=_("Street/Mahalla ID")
-    )
-    street_name = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True,
-        verbose_name=_("Street/Mahalla Name")
-    )
+    # Location details
+    region_id = models.IntegerField(blank=True, null=True, verbose_name=_("Region ID"))
+    region_name = models.CharField(max_length=255, verbose_name=_("Region Name"))
+    district_id = models.IntegerField(verbose_name=_("District ID"))
+    district_name = models.CharField(max_length=255, verbose_name=_("District Name"))
+    street_id = models.IntegerField(blank=True, null=True, verbose_name=_("Street/Mahalla ID"))
+    street_name = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Street/Mahalla Name"))
 
-    target_full_name = models.CharField(
-        max_length=255,
-        verbose_name=_("Target Full Name")
-    )
-    target_position = models.CharField(
-        max_length=255,
-        verbose_name=_("Target Position")
-    )
-    target_organization = models.CharField(
-        max_length=500,
-        verbose_name=_("Target Organization")
-    )
+    # Target details
+    target_full_name = models.CharField(max_length=255, verbose_name=_("Target Full Name"))
+    target_position = models.CharField(max_length=255, verbose_name=_("Target Position"))
+    target_organization = models.CharField(max_length=500, verbose_name=_("Target Organization"))
 
-    complaint_text = models.TextField(
-        verbose_name=_("Complaint Text")
-    )
+    # Complaint content
+    complaint_text = models.TextField(verbose_name=_("Complaint Text"))
 
+    # Status
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
         default='new',
         verbose_name=_("Status")
     )
+    admin_notes = models.TextField(blank=True, null=True, verbose_name=_("Admin Notes"))
 
-    admin_notes = models.TextField(
-        blank=True,
-        null=True,
-        verbose_name=_("Admin Notes")
-    )
-
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name=_("Created At")
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        verbose_name=_("Updated At")
-    )
-    resolved_at = models.DateTimeField(
-        blank=True,
-        null=True,
-        verbose_name=_("Resolved At")
-    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Updated At"))
+    resolved_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Resolved At"))
 
     class Meta:
         verbose_name = _("Complaint")
@@ -186,7 +102,6 @@ class Complaint(models.Model):
 
 
 class ComplaintMedia(models.Model):
-
     FILE_TYPE_CHOICES = [
         ('photo', _('Photo')),
         ('video', _('Video')),
@@ -199,25 +114,11 @@ class ComplaintMedia(models.Model):
         related_name='media_files',
         verbose_name=_("Complaint")
     )
-    file_id = models.CharField(
-        max_length=255,
-        verbose_name=_("Telegram File ID")
-    )
-    file_type = models.CharField(
-        max_length=20,
-        choices=FILE_TYPE_CHOICES,
-        verbose_name=_("File Type")
-    )
-    file_name = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True,
-        verbose_name=_("File Name")
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name=_("Created At")
-    )
+    file_id = models.CharField(max_length=255, verbose_name=_("Telegram File ID"))
+    file = models.FileField(upload_to='complaints/', blank=True, null=True, verbose_name=_("Uploaded File"))
+    file_type = models.CharField(max_length=20, choices=FILE_TYPE_CHOICES, verbose_name=_("File Type"))
+    file_name = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("File Name"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
 
     class Meta:
         verbose_name = _("Complaint Media")
@@ -227,33 +128,24 @@ class ComplaintMedia(models.Model):
     def __str__(self):
         return f"{self.get_file_type_display()} for Complaint #{self.complaint.id}"
 
+    def preview(self):
+        """Admin panelda faylni ko‘rsatish uchun"""
+        if self.file and self.file.url:
+            if self.file_type == 'photo':
+                return format_html(f'<img src="{self.file.url}" width="150" />')
+            else:
+                return format_html(f'<a href="{self.file.url}" target="_blank">{self.file_name or "📎 Download"}</a>')
+        return "No file"
+    preview.short_description = "Preview"
+
 
 class BroadcastMessage(models.Model):
-
-    text = models.TextField(
-        verbose_name=_("Message Text")
-    )
-    sent_count = models.IntegerField(
-        default=0,
-        verbose_name=_("Sent Count")
-    )
-    failed_count = models.IntegerField(
-        default=0,
-        verbose_name=_("Failed Count")
-    )
-    created_by = models.CharField(
-        max_length=255,
-        verbose_name=_("Created By")
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name=_("Created At")
-    )
-    completed_at = models.DateTimeField(
-        blank=True,
-        null=True,
-        verbose_name=_("Completed At")
-    )
+    text = models.TextField(verbose_name=_("Message Text"))
+    sent_count = models.IntegerField(default=0, verbose_name=_("Sent Count"))
+    failed_count = models.IntegerField(default=0, verbose_name=_("Failed Count"))
+    created_by = models.CharField(max_length=255, verbose_name=_("Created By"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created At"))
+    completed_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Completed At"))
 
     class Meta:
         verbose_name = _("Broadcast Message")
@@ -262,4 +154,3 @@ class BroadcastMessage(models.Model):
 
     def __str__(self):
         return f"Broadcast #{self.id} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
-    

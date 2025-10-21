@@ -10,7 +10,7 @@ BOT_TOKEN = os.getenv('API_TOKEN')
 ADMIN_CHAT_ID = os.getenv('ADMINS')
 GROUP_ID = os.getenv('GROUP_ID', ADMIN_CHAT_ID)
 
-ADMIN_IDS = [int(id.strip()) for id in os.getenv('ADMIN_IDS', '').split(',') if id.strip()]
+ADMIN_IDS = [int(id.strip()) for id in os.getenv('ADMINS', '').split(',') if id.strip()]
 
 bot = Bot(
     token=BOT_TOKEN,

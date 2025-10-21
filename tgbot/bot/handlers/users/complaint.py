@@ -50,7 +50,6 @@ async def start_complaint(message: Message, state: FSMContext):
 
 @router.message(ComplaintStates.anonymity)
 async def process_anonymity(message: Message, state: FSMContext):
-
     data = await state.get_data()
     lang = data.get('language', 'ru')
     is_anonymous = message.text in ["Анонимно 🕵️", "Anonim 🕵️"]
@@ -58,25 +57,20 @@ async def process_anonymity(message: Message, state: FSMContext):
     await state.update_data(is_anonymous=is_anonymous)
 
     if is_anonymous:
-        text = get_text(lang, 'select_region')
-        regions = location_manager.get_all_regions()
+        text = "✍️ Nima bo‘lganini qisqacha yozing:" if lang == 'uz' else "✍️ Опишите, что произошло, кратко:"
+        await message.answer(
+            text,
+            reply_markup=ReplyKeyboardRemove()
+        )
+        await state.set_state(ComplaintStates.complaint_text)
+        return
 
-        await message.answer(
-            text,
-            reply_markup=ReplyKeyboardRemove()
-        )
-        await message.answer(
-            "Выберите регион / Viloyatni tanlang:",
-            reply_markup=regions_inline_keyboard(regions)
-        )
-        await state.set_state(ComplaintStates.region)
-    else:
-        text = get_text(lang, 'enter_full_name')
-        await message.answer(
-            text,
-            reply_markup=ReplyKeyboardRemove()
-        )
-        await state.set_state(ComplaintStates.full_name)
+    text = get_text(lang, 'enter_full_name')
+    await message.answer(
+        text,
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await state.set_state(ComplaintStates.full_name)
 
 
 @router.message(ComplaintStates.full_name)
@@ -478,21 +472,21 @@ async def confirm_and_send_complaint(message: Message, state: FSMContext):
         complaint = await sync_to_async(Complaint.objects.create)(
             user=user,
             is_anonymous=data.get('is_anonymous', False),
-            full_name=data.get('full_name'),
-            phone_number=data.get('phone_number'),
+            full_name=data.get('full_name') or (None if data.get('is_anonymous') else None),
+            phone_number=data.get('phone_number') or (None if data.get('is_anonymous') else None),
             telegram_username=message.from_user.username,
-            region_id=data.get('region_id'),
-            region_name=data.get('region_name'),
-            district_id=data.get('district_id'),
-            district_name=data.get('district_name'),
-            street_id=data.get('street_id'),
-            street_name=data.get('street_name'),
-            target_full_name=data.get('target_full_name'),
-            target_position=data.get('target_position'),
-            target_organization=data.get('target_organization'),
+            region_id=(data.get('region_id') if data.get('region_id') is not None else 0),
+            region_name=data.get('region_name') or ("Anonim" if data.get('is_anonymous') else "-"),
+            district_id=(data.get('district_id') if data.get('district_id') is not None else 0),
+            district_name=data.get('district_name') or ("Anonim" if data.get('is_anonymous') else "-"),
+            street_id=(data.get('street_id') if data.get('street_id') is not None else 0),
+            street_name=data.get('street_name') or ("Anonim" if data.get('is_anonymous') else "-"),
+            target_full_name=data.get('target_full_name') or ("Anonim" if data.get('is_anonymous') else "-"),
+            target_position=data.get('target_position') or ("Anonim" if data.get('is_anonymous') else "-"),
+            target_organization=data.get('target_organization') or ("Anonim" if data.get('is_anonymous') else "-"),
             complaint_text=data.get('complaint_text'),
             status='new'
-        )
+)
 
         media_files = data.get('media_files', [])
         for media in media_files:
@@ -541,58 +535,7 @@ async def cancel_complaint(message: Message, state: FSMContext):
     await state.clear()
 
 
-# async def send_complaint_to_admin(complaint, media_files: list, lang: str):
 
-#     admin_text = f"🚨 <b>Новая жалоба #{complaint.id}</b>\n\n"
-
-#     if complaint.is_anonymous:
-#         admin_text += "🕵️ <b>Тип:</b> Анонимная\n\n"
-#     else:
-#         admin_text += f"👤 <b>От:</b> {complaint.full_name}\n"
-#         admin_text += f"📱 <b>Телефон:</b> {complaint.phone_number}\n"
-#         if complaint.telegram_username:
-#             admin_text += f"💬 <b>Telegram:</b> @{complaint.telegram_username}\n"
-#         admin_text += "\n"
-
-#     admin_text += f"📍 <b>Регион:</b> {complaint.region_name}\n"
-#     admin_text += f"🏘 <b>Район:</b> {complaint.district_name}\n"
-#     if complaint.street_name:
-#         admin_text += f"📌 <b>Махалля:</b> {complaint.street_name}\n"
-#     admin_text += "\n"
-
-#     admin_text += f"👨‍💼 <b>На кого:</b> {complaint.target_full_name}\n"
-#     admin_text += f"💼 <b>Должность:</b> {complaint.target_position}\n"
-#     admin_text += f"🏢 <b>Организация:</b> {complaint.target_organization}\n\n"
-
-#     admin_text += f"📝 <b>Текст жалобы:</b>\n{complaint.complaint_text}\n\n"
-
-#     admin_text += f"🕐 <b>Дата:</b> {complaint.created_at.strftime('%d.%m.%Y %H:%M')}"
-
-#     try:
-
-#         await bot.send_message(
-#             chat_id=ADMIN_CHAT_ID,
-#             text=admin_text
-#         )
-
-#         for media in media_files:
-#             if media['file_type'] == 'photo':
-#                 await bot.send_photo(
-#                     chat_id=ADMIN_CHAT_ID,
-#                     photo=media['file_id']
-#                 )
-#             elif media['file_type'] == 'video':
-#                 await bot.send_video(
-#                     chat_id=ADMIN_CHAT_ID,
-#                     video=media['file_id']
-#                 )
-#             elif media['file_type'] == 'document':
-#                 await bot.send_document(
-#                     chat_id=ADMIN_CHAT_ID,
-#                     document=media['file_id']
-#                 )
-#     except Exception as e:
-#         print(f"Error sending to admin chat: {e}")
 pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
 
 GROUP_ID = str(os.getenv('GROUP_ID', ADMIN_CHAT_ID))
@@ -647,7 +590,7 @@ async def send_complaint_to_admin(complaint, media_files: list, lang: str):
         try:
             file_info = await bot.get_file(media['file_id'])
             file_path = f"{folder_path}/{media.get('file_name', media['file_id'])}"
-            await bot.download_file(file_info.file_path, destination=file_path)
+            await bot.download_file(file_info.file_path, destination=file_path) # type: ignore
         except Exception as e:
             print(f"Error downloading media: {e}")
 

@@ -25,7 +25,7 @@ async def admin_panel(message: Message, state: FSMContext):
     """Open admin panel"""
 
     if not is_admin(message.from_user.id):
-        await message.answer("❌ У вас нет доступа к админ-панели.")
+        await message.answer(f"❌ У вас нет доступа к админ-панели.  ADMIN {ADMIN_IDS} MESSAGE {message.from_user.id}")
         return
 
     await state.clear()
