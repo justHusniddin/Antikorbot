@@ -46,6 +46,8 @@ if [ -n "$DJANGO_SUPERUSER_EMAIL" ] && [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ 
   echo ">>> Creating superuser..."
   python manage.py createsuperuser --noinput || true
 fi
-python manage.py runserver &
+
+gunicorn --workers 4 --threads 2 --preload --timeout 60 --bind 0.0.0.0:8000 src.wsgi:application &
+
 echo ">>> Starting supervisord..."
 exec "$@"

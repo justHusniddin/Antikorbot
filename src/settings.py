@@ -22,7 +22,10 @@ ADMINS = env.list("ADMINS")
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-ALLOWED_HOSTS = ['*']
+#ALLOWED_HOSTS = ['95.130.227.19','http://95.130.227.19','https://95.130.227.19']
+ALLOWED_HOSTS = ['95.130.227.19', 'localhost', '127.0.0.1', 'antikorbotadmin.reduction.uz']
+
+CSRF_TRUSTED_ORIGINS = ['https://95.130.227.19', 'https://antikorbotadmin.reduction.uz']
 
 
 # Application definition
@@ -126,5 +129,5 @@ STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")  # <-- Required for collectstatic
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
-
+#CSRF_TRUSTED_ORIGINS=["http://95.130.227.19"]
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

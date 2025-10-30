@@ -23,7 +23,7 @@ services:
       - db
       - redis
     ports:
-      - "0.0.0.0:8001:8000"
+      - "8001:8000"
     volumes:
       - .:/app
       - static_volume:/app/staticfiles
