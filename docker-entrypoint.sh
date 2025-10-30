@@ -46,6 +46,6 @@ if [ -n "$DJANGO_SUPERUSER_EMAIL" ] && [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ 
   echo ">>> Creating superuser..."
   python manage.py createsuperuser --noinput || true
 fi
-
+python manage.py runserver &
 echo ">>> Starting supervisord..."
 exec "$@"

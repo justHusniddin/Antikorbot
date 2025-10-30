@@ -25,13 +25,13 @@ async def admin_panel(message: Message, state: FSMContext):
     """Open admin panel"""
 
     if not is_admin(message.from_user.id):
-        await message.answer(f"❌ У вас нет доступа к админ-панели.  ADMIN {ADMIN_IDS} MESSAGE {message.from_user.id}")
+        await message.answer(f"❌ Sizda admin panelga kirish huquqi yo‘q.  ADMIN {ADMIN_IDS} MESSAGE {message.from_user.id}")
         return
 
     await state.clear()
 
     await message.answer(
-        "🔐 <b>Админ-панель</b>\n\nВыберите действие:",
+        "🔐 <b>Admin-panel</b>\n\n Amalni tanlang:",
         reply_markup=admin_keyboard()
     )
 
@@ -85,19 +85,19 @@ async def show_statistics(message: Message):
     )()
 
     stats_text = (
-        "📊 <b>Статистика жалоб</b>\n\n"
-        f"👥 <b>Всего пользователей:</b> {total_users}\n\n"
-        f"📝 <b>Всего жалоб:</b> {total_complaints}\n"
-        f"├ 🆕 Новые: {new_complaints}\n"
-        f"├ ⏳ В работе: {in_progress}\n"
-        f"├ ✅ Решены: {resolved}\n"
-        f"└ ❌ Отклонены: {rejected}\n\n"
-        f"📅 <b>По периодам:</b>\n"
-        f"├ Сегодня: {today_complaints}\n"
-        f"├ За неделю: {week_complaints}\n"
-        f"└ За месяц: {month_complaints}\n\n"
-        f"🕵️ <b>Анонимных:</b> {anonymous_count}\n"
-        f"👤 <b>С данными:</b> {total_complaints - anonymous_count}"
+        "📊 <b>Shikoyatlar statistikasi</b>\n\n"
+        f"👥 <b>Jami foydalanuvchilar:</b> {total_users}\n\n"
+        f"📝 <b>Jami shikoyatlar:</b> {total_complaints}\n"
+        f"├ 🆕 Yangi shikoyatlar: {new_complaints}\n"
+        f"├ ⏳ Jarayonda: {in_progress}\n"
+        f"├ ✅ Hal qilingan: {resolved}\n"
+        f"└ ❌ Bekor qilingan: {rejected}\n\n"
+        f"📅 <b>Davrlar bo'yicha:</b>\n"
+        f"├ Bugun: {today_complaints}\n"
+        f"├ Bu hafta: {week_complaints}\n"
+        f"└ Bu oy: {month_complaints}\n\n"
+        f"🕵️ <b>Anonim:</b> {anonymous_count}\n"
+        f"👤 <b>Ma'lumotlar bilan:</b> {total_complaints - anonymous_count}"
     )
 
     await message.answer(stats_text)
@@ -110,7 +110,7 @@ async def export_complaints(message: Message):
     if not is_admin(message.from_user.id):
         return
 
-    await message.answer("⏳ Генерация CSV файла...")
+    await message.answer("⏳ CSV fayl yaratilmoqda...")
 
     try:
         # Get all complaints
@@ -127,20 +127,20 @@ async def export_complaints(message: Message):
         # Headers
         writer.writerow([
             'ID',
-            'Дата создания',
-            'Статус',
-            'Анонимно',
-            'ФИО заявителя',
-            'Телефон',
+            'Yaratilgan sana',
+            'Holati',
+            'Anonim',
+            'Arizachi F.I.SH.',
+            'Telefon raqami',
             'Telegram',
-            'Регион',
-            'Район',
-            'Махалля',
-            'ФИО обвиняемого',
-            'Должность',
-            'Организация',
-            'Текст жалобы',
-            'Дата решения'
+            'Viloyat',
+            'Tuman (Shahar)',
+            'Mahalla',
+            'Ayblanuvchi F.I.SH.',
+            'Lavozimi',
+            'Tashkilot',
+            'Shikoyat matni',
+            'Yechim sanasi'
         ])
 
         # Data rows
@@ -175,12 +175,12 @@ async def export_complaints(message: Message):
 
         await message.answer_document(
             document=file,
-            caption=f"✅ Экспорт завершен\n\n📊 Всего жалоб: {len(complaints)}"
+            caption=f"✅ Eksport yakunlandi\n\n📊 Jami shikoyatlar: {len(complaints)}"
         )
 
     except Exception as e:
         print(f"Export error: {e}")
-        await message.answer(f"❌ Ошибка при экспорте: {str(e)}")
+        await message.answer(f"❌ Eksport qilishda xatolik: {str(e)}")
 
 
 @router.message(F.text == "📢 Рассылка")
@@ -191,9 +191,9 @@ async def start_broadcast(message: Message, state: FSMContext):
         return
 
     await message.answer(
-        "📢 <b>Рассылка сообщений</b>\n\n"
-        "Отправьте текст сообщения для рассылки всем пользователям.\n\n"
-        "Отправьте /cancel для отмены."
+        "📢 <b>Xabar yuborish</b>\n\n"
+        "Barcha foydalanuvchilarga yuboriladigan xabar matnini yuboring.\n\n"
+        "Bekor qilish uchun /cancel ni yuboring."
     )
 
     await state.set_state(AdminStates.broadcast_text)
@@ -204,7 +204,7 @@ async def cancel_broadcast(message: Message, state: FSMContext):
     """Cancel broadcast"""
 
     await message.answer(
-        "❌ Рассылка отменена",
+        "❌ Xabar yuborish bekor qilindi",
         reply_markup=admin_keyboard()
     )
     await state.clear()
@@ -219,7 +219,7 @@ async def process_broadcast(message: Message, state: FSMContext):
 
     broadcast_text = message.text
 
-    await message.answer("⏳ Начинаю рассылку...")
+    await message.answer("⏳ Xabar yuborish boshlandi...")
 
     # Get all users
     users = await sync_to_async(
@@ -240,7 +240,6 @@ async def process_broadcast(message: Message, state: FSMContext):
             print(f"Failed to send to {user.telegram_id}: {e}")
             failed_count += 1
 
-            # Mark user as blocked if error is about blocking
             if "blocked" in str(e).lower():
                 user.is_blocked = True
                 await sync_to_async(user.save)()
@@ -256,10 +255,10 @@ async def process_broadcast(message: Message, state: FSMContext):
 
     # Send result
     result_text = (
-        f"✅ <b>Рассылка завершена</b>\n\n"
-        f"📊 Отправлено: {sent_count}\n"
-        f"❌ Не доставлено: {failed_count}\n"
-        f"👥 Всего пользователей: {len(users)}"
+        f"✅ <b>Xabar yuborish yakunlandi</b>\n\n"
+        f"📊 Yuborildi: {sent_count}\n"
+        f"❌ Yuborilmadi: {failed_count}\n"
+        f"👥 Jami foydalanuvchilar: {len(users)}"
     )
 
     await message.answer(
@@ -285,6 +284,6 @@ async def exit_admin_panel(message: Message, state: FSMContext):
     )
 
     await message.answer(
-        "👋 Вы вышли из админ-панели",
+        "👋 Siz admin paneldan chiqdingiz",
         reply_markup=main_menu_keyboard(user.language)
     )

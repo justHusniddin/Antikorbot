@@ -29,6 +29,8 @@ from tgbot.bot.keyboards.reply import (
 )
 from tgbot.bot.loader import get_text, location_manager, bot, ADMIN_CHAT_ID
 
+from datetime import datetime
+
 router = Router()
 
 
@@ -451,7 +453,7 @@ async def create_complaint_summary(data: dict, lang: str) -> str:
 
         media_count = len(data.get('media_files', []))
         if media_count > 0:
-            summary += f"<b>📎 Biriktirilgan fayllar:</b> {media_count}\n"
+            summary += f"<b>📎 Biriktirilgan faylar:</b> {media_count}\n"
 
     return summary
 
@@ -486,7 +488,7 @@ async def confirm_and_send_complaint(message: Message, state: FSMContext):
             target_organization=data.get('target_organization') or ("Anonim" if data.get('is_anonymous') else "-"),
             complaint_text=data.get('complaint_text'),
             status='new'
-)
+        )
 
         media_files = data.get('media_files', [])
         for media in media_files:
@@ -497,11 +499,14 @@ async def confirm_and_send_complaint(message: Message, state: FSMContext):
                 file_name=media.get('file_name')
             )
 
-        if ADMIN_CHAT_ID:
-            await send_complaint_to_admin(complaint, media_files, lang)
+        year = datetime.now().year
+        count = await sync_to_async(lambda: Complaint.objects.filter(created_at__year=year).count())()
+        complaint_number = f"{datetime.now().year}-{datetime.now().month}-{complaint.id}"
 
-        # Confirm to user
-        success_text = get_text(lang, 'complaint_sent').format(complaint.id)
+        if ADMIN_CHAT_ID:
+            await send_complaint_to_admin(complaint, media_files, lang, complaint_number)
+
+        success_text = get_text(lang, 'complaint_sent').format(complaint_number)
         await message.answer(
             success_text,
             reply_markup=main_menu_keyboard(lang)
@@ -540,9 +545,10 @@ pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/D
 
 GROUP_ID = str(os.getenv('GROUP_ID', ADMIN_CHAT_ID))
 
-async def send_complaint_to_admin(complaint, media_files: list, lang: str):
-    # 🧾 Text message for admin
-    admin_text = f"🚨 <b>Yangi shikoyat #{complaint.id}</b>\n\n"
+async def send_complaint_to_admin(complaint, media_files: list, lang: str, complaint_number: str = None):
+    display_number = complaint_number or str(complaint.id)
+
+    admin_text = f"🚨 <b>Yangi shikoyat #{display_number}</b>\n\n"
 
     if complaint.is_anonymous:
         admin_text += "🕵️ <b>Turi:</b> Anonim\n\n"
@@ -565,9 +571,9 @@ async def send_complaint_to_admin(complaint, media_files: list, lang: str):
     admin_text += f"🕐 <b>Sana:</b> {complaint.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
 
     # 📄 Create summary PDF
-    folder_path = f"/tmp/complaint_{complaint.id}"
+    folder_path = f"/tmp/complaint_{display_number}"
     os.makedirs(folder_path, exist_ok=True)
-    pdf_path = os.path.join(folder_path, f"complaint_{complaint.id}_summary.pdf")
+    pdf_path = os.path.join(folder_path, f"complaint_{display_number}_summary.pdf")
 
     pdf_buffer = BytesIO()
     doc = SimpleDocTemplate(pdf_buffer, pagesize=A4)
@@ -576,7 +582,7 @@ async def send_complaint_to_admin(complaint, media_files: list, lang: str):
     styles["Heading1"].fontName = 'DejaVuSans'
 
     story = [
-        Paragraph(f"<b>Shikoyat №{complaint.id}</b>", styles["Heading1"]),
+        Paragraph(f"<b>Shikoyat №{display_number}</b>", styles["Heading1"]),
         Spacer(1, 12),
         Paragraph(admin_text.replace("\n", "<br/>"), styles["Normal"]),
     ]
@@ -585,16 +591,16 @@ async def send_complaint_to_admin(complaint, media_files: list, lang: str):
     with open(pdf_path, "wb") as f:
         f.write(pdf_buffer.getvalue())
 
-    # 📦 Save original media (without converting)
+    # 📦 Save media
     for media in media_files:
         try:
             file_info = await bot.get_file(media['file_id'])
             file_path = f"{folder_path}/{media.get('file_name', media['file_id'])}"
-            await bot.download_file(file_info.file_path, destination=file_path) # type: ignore
+            await bot.download_file(file_info.file_path, destination=file_path)
         except Exception as e:
             print(f"Error downloading media: {e}")
 
-    # 🔐 Create ZIP (contains PDF + all attachments)
+    # 🔐 ZIP
     zip_path = f"{folder_path}.zip"
     with zipfile.ZipFile(zip_path, "w") as zipf:
         for root, _, files in os.walk(folder_path):
@@ -602,13 +608,13 @@ async def send_complaint_to_admin(complaint, media_files: list, lang: str):
                 full_path = os.path.join(root, file)
                 zipf.write(full_path, os.path.relpath(full_path, folder_path))
 
-    # 📤 Send summary message + ZIP to admin
+    # 📤 Send to admin
     try:
         await bot.send_message(chat_id=GROUP_ID, text=admin_text, parse_mode="HTML")
-
-        zip_file = FSInputFile(zip_path, filename=f"complaint_{complaint.id}.zip")
+        zip_file = FSInputFile(zip_path, filename=f"complaint_{display_number}.zip")
         await bot.send_document(chat_id=GROUP_ID, document=zip_file,
-                                caption=f"📦 Shikoyat #{complaint.id} uchun fayllar")
-
+                                caption=f"📦 Shikoyat #{display_number} uchun fayllar")
     except Exception as e:
         print(f"Error sending complaint to admin: {e}")
+
+
