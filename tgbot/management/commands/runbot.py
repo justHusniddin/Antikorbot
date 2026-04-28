@@ -33,14 +33,29 @@ async def on_startup():
     dp.include_router(complaint.router)
     dp.include_router(admin_handler.router)
     dp.include_router(error_handler.router)
-    from aiogram.types import BotCommand, BotCommandScopeDefault
+    from aiogram.types import (
+        BotCommand,
+        BotCommandScopeDefault,
+        BotCommandScopeAllPrivateChats,
+        BotCommandScopeAllGroupChats,
+        BotCommandScopeAllChatAdministrators,
+        MenuButtonCommands,
+    )
 
     commands = [
         BotCommand(command="start", description="Start bot / Botni ishga tushirish"),
         BotCommand(command="admin", description="Admin panel (admins only)"),
     ]
 
+    for scope in (
+        BotCommandScopeAllPrivateChats(),
+        BotCommandScopeAllGroupChats(),
+        BotCommandScopeAllChatAdministrators(),
+    ):
+        await bot.delete_my_commands(scope=scope)
+
     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
+    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
     logger.info("Bot started successfully!")
 

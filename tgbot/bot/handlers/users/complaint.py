@@ -541,7 +541,24 @@ async def cancel_complaint(message: Message, state: FSMContext):
 
 
 
-pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
+_FONT_REGISTERED = False
+_FONT_CANDIDATES = [
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    r'C:\Windows\Fonts\arial.ttf',
+]
+
+
+def _ensure_pdf_font():
+    global _FONT_REGISTERED
+    if _FONT_REGISTERED:
+        return
+    for path in _FONT_CANDIDATES:
+        if os.path.exists(path):
+            pdfmetrics.registerFont(TTFont('DejaVuSans', path))
+            _FONT_REGISTERED = True
+            return
+    raise FileNotFoundError(f"No suitable TTF font found; tried: {_FONT_CANDIDATES}")
+
 
 GROUP_ID = str(os.getenv('GROUP_ID', ADMIN_CHAT_ID))
 
@@ -570,10 +587,12 @@ async def send_complaint_to_admin(complaint, media_files: list, lang: str, compl
     admin_text += f"📝 <b>Shikoyat matni:</b>\n{complaint.complaint_text}\n\n"
     admin_text += f"🕐 <b>Sana:</b> {complaint.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
 
-    # 📄 Create summary PDF
+
     folder_path = f"/tmp/complaint_{display_number}"
     os.makedirs(folder_path, exist_ok=True)
     pdf_path = os.path.join(folder_path, f"complaint_{display_number}_summary.pdf")
+
+    _ensure_pdf_font()
 
     pdf_buffer = BytesIO()
     doc = SimpleDocTemplate(pdf_buffer, pagesize=A4)
@@ -591,11 +610,15 @@ async def send_complaint_to_admin(complaint, media_files: list, lang: str, compl
     with open(pdf_path, "wb") as f:
         f.write(pdf_buffer.getvalue())
 
-    # 📦 Save media
     for media in media_files:
         try:
             file_info = await bot.get_file(media['file_id'])
-            file_path = f"{folder_path}/{media.get('file_name', media['file_id'])}"
+
+            file_ext = os.path.splitext(file_info.file_path)[1] 
+
+            file_name = media.get('file_name') or f"{media['file_type']}_{media['file_id']}{file_ext}"
+            file_path = os.path.join(folder_path, file_name)
+
             await bot.download_file(file_info.file_path, destination=file_path)
         except Exception as e:
             print(f"Error downloading media: {e}")
