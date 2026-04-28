@@ -2,7 +2,9 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from asgiref.sync import sync_to_async
+import logging
 import re
+import shutil
 
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -27,10 +29,11 @@ from tgbot.bot.keyboards.reply import (
     districts_inline_keyboard,
     mahallas_inline_keyboard
 )
-from tgbot.bot.loader import get_text, location_manager, bot, ADMIN_CHAT_ID
+from tgbot.bot.loader import get_text, location_manager, bot, GROUP_ID
 
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
@@ -503,8 +506,13 @@ async def confirm_and_send_complaint(message: Message, state: FSMContext):
         count = await sync_to_async(lambda: Complaint.objects.filter(created_at__year=year).count())()
         complaint_number = f"{datetime.now().year}-{datetime.now().month}-{complaint.id}"
 
-        if ADMIN_CHAT_ID:
+        if GROUP_ID is not None:
             await send_complaint_to_admin(complaint, media_files, lang, complaint_number)
+        else:
+            logger.warning(
+                "GROUP_ID is not configured; skipping admin notification for complaint #%s",
+                complaint_number,
+            )
 
         success_text = get_text(lang, 'complaint_sent').format(complaint_number)
         await message.answer(
@@ -514,8 +522,8 @@ async def confirm_and_send_complaint(message: Message, state: FSMContext):
 
         await state.clear()
 
-    except Exception as e:
-        print(f"Error saving complaint: {e}")
+    except Exception:
+        logger.exception("Error saving complaint")
         error_text = get_text(lang, 'error')
         await message.answer(
             error_text,
@@ -560,8 +568,6 @@ def _ensure_pdf_font():
     raise FileNotFoundError(f"No suitable TTF font found; tried: {_FONT_CANDIDATES}")
 
 
-GROUP_ID = str(os.getenv('GROUP_ID', ADMIN_CHAT_ID))
-
 async def send_complaint_to_admin(complaint, media_files: list, lang: str, complaint_number: str = None):
     display_number = complaint_number or str(complaint.id)
 
@@ -589,55 +595,62 @@ async def send_complaint_to_admin(complaint, media_files: list, lang: str, compl
 
 
     folder_path = f"/tmp/complaint_{display_number}"
+    zip_path = f"{folder_path}.zip"
     os.makedirs(folder_path, exist_ok=True)
     pdf_path = os.path.join(folder_path, f"complaint_{display_number}_summary.pdf")
 
-    _ensure_pdf_font()
-
-    pdf_buffer = BytesIO()
-    doc = SimpleDocTemplate(pdf_buffer, pagesize=A4)
-    styles = getSampleStyleSheet()
-    styles["Normal"].fontName = 'DejaVuSans'
-    styles["Heading1"].fontName = 'DejaVuSans'
-
-    story = [
-        Paragraph(f"<b>Shikoyat №{display_number}</b>", styles["Heading1"]),
-        Spacer(1, 12),
-        Paragraph(admin_text.replace("\n", "<br/>"), styles["Normal"]),
-    ]
-    doc.build(story)
-
-    with open(pdf_path, "wb") as f:
-        f.write(pdf_buffer.getvalue())
-
-    for media in media_files:
-        try:
-            file_info = await bot.get_file(media['file_id'])
-
-            file_ext = os.path.splitext(file_info.file_path)[1] 
-
-            file_name = media.get('file_name') or f"{media['file_type']}_{media['file_id']}{file_ext}"
-            file_path = os.path.join(folder_path, file_name)
-
-            await bot.download_file(file_info.file_path, destination=file_path)
-        except Exception as e:
-            print(f"Error downloading media: {e}")
-
-    # 🔐 ZIP
-    zip_path = f"{folder_path}.zip"
-    with zipfile.ZipFile(zip_path, "w") as zipf:
-        for root, _, files in os.walk(folder_path):
-            for file in files:
-                full_path = os.path.join(root, file)
-                zipf.write(full_path, os.path.relpath(full_path, folder_path))
-
-    # 📤 Send to admin
     try:
-        await bot.send_message(chat_id=GROUP_ID, text=admin_text, parse_mode="HTML")
-        zip_file = FSInputFile(zip_path, filename=f"complaint_{display_number}.zip")
-        await bot.send_document(chat_id=GROUP_ID, document=zip_file,
-                                caption=f"📦 Shikoyat #{display_number} uchun fayllar")
-    except Exception as e:
-        print(f"Error sending complaint to admin: {e}")
+        _ensure_pdf_font()
+
+        pdf_buffer = BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=A4)
+        styles = getSampleStyleSheet()
+        styles["Normal"].fontName = 'DejaVuSans'
+        styles["Heading1"].fontName = 'DejaVuSans'
+
+        story = [
+            Paragraph(f"<b>Shikoyat №{display_number}</b>", styles["Heading1"]),
+            Spacer(1, 12),
+            Paragraph(admin_text.replace("\n", "<br/>"), styles["Normal"]),
+        ]
+        doc.build(story)
+
+        with open(pdf_path, "wb") as f:
+            f.write(pdf_buffer.getvalue())
+
+        for media in media_files:
+            try:
+                file_info = await bot.get_file(media['file_id'])
+
+                file_ext = os.path.splitext(file_info.file_path)[1]
+
+                file_name = media.get('file_name') or f"{media['file_type']}_{media['file_id']}{file_ext}"
+                file_path = os.path.join(folder_path, file_name)
+
+                await bot.download_file(file_info.file_path, destination=file_path)
+            except Exception:
+                logger.exception("Error downloading media file_id=%s", media.get('file_id'))
+
+        with zipfile.ZipFile(zip_path, "w") as zipf:
+            for root, _, files in os.walk(folder_path):
+                for file in files:
+                    full_path = os.path.join(root, file)
+                    zipf.write(full_path, os.path.relpath(full_path, folder_path))
+
+        try:
+            await bot.send_message(chat_id=GROUP_ID, text=admin_text, parse_mode="HTML")
+            zip_file = FSInputFile(zip_path, filename=f"complaint_{display_number}.zip")
+            await bot.send_document(chat_id=GROUP_ID, document=zip_file,
+                                    caption=f"📦 Shikoyat #{display_number} uchun fayllar")
+        except Exception:
+            logger.exception(
+                "Error sending complaint #%s to chat_id=%r", display_number, GROUP_ID
+            )
+    finally:
+        shutil.rmtree(folder_path, ignore_errors=True)
+        try:
+            os.remove(zip_path)
+        except OSError:
+            pass
 
 

@@ -7,10 +7,33 @@ from aiogram.client.default import DefaultBotProperties
 
 
 BOT_TOKEN = os.getenv('API_TOKEN')
-ADMIN_CHAT_ID = os.getenv('ADMINS')
-GROUP_ID = os.getenv('GROUP_ID', ADMIN_CHAT_ID)
 
 ADMIN_IDS = [int(id.strip()) for id in os.getenv('ADMINS', '').split(',') if id.strip()]
+
+
+def _coerce_chat_id(value):
+    if value is None:
+        return None
+    value = str(value).strip()
+    if not value:
+        return None
+    if value.startswith('@'):
+        return value
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
+_raw_group_id = os.getenv('GROUP_ID')
+if _raw_group_id and _raw_group_id.strip():
+    GROUP_ID = _coerce_chat_id(_raw_group_id)
+elif ADMIN_IDS:
+    GROUP_ID = ADMIN_IDS[0]
+else:
+    GROUP_ID = None
+
+ADMIN_CHAT_ID = GROUP_ID
 
 bot = Bot(
     token=BOT_TOKEN,
